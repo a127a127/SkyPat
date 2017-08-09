@@ -149,17 +149,6 @@ void SKYPAT_TEST_CLASS_NAME_(case_name, test_name)::TestBody()
     fail(skypat::testing::GetBoolAssertionFailureMessage(\
         _ar_, text, #actual, #expected))
 
-// Implements Predicate test assertions such as EXPECT_EQ.
-//
-// The last parameter 'fail' is the run-time result of the testing
-#define SKYPAT_TEST_PREDICATE(expression, text, actual, expected, fail) \
-  SKYPAT_UNAMBIGUOUS_ELSE_BLOCKER \
-  if (const skypat::testing::AssertionResult _ar_ = \
-      skypat::testing::AssertionResult(expression)) \
-    SKYPAT_SUCCESS(""); \
-  else \
-    fail(skypat::testing::GetPredAssertionFailureMessage(\
-        _ar_, text, actual, #actual, expected, #expected))
 
 //===----------------------------------------------------------------------===//
 // Supports
@@ -488,6 +477,35 @@ std::string GetPredAssertionFailureMessage(
   OS << "\n  Expected: " << pExpectedPredicateValue;
   return result;
 }
+
+#define SKYPAT_GEN_CMP_HELPER(CMP_NAME, CMP_OP) \
+  template <typename T_LHS, typename T_RHS> \
+  bool CompareHelper##CMP_NAME(const T_LHS& lhs, const T_RHS& rhs, \
+                               const char *lhs_str, const char *rhs_str, \
+                               const char *exp_str, \
+                               TestPartResult::Type fail_type, \
+                               const std::string& file, int line_of_code) { \
+    if (const AssertionResult _ar_ = \
+        AssertionResult(lhs CMP_OP rhs)) { \
+      SKYPAT_MESSAGE_AT(file, line_of_code, "", TestPartResult::kSuccess); \
+      return true; \
+    } else { \
+      SKYPAT_MESSAGE_AT(file, line_of_code, \
+                        GetPredAssertionFailureMessage( \
+                                                       _ar_, exp_str, lhs, lhs_str, rhs, rhs_str), \
+                        fail_type); \
+      return false; \
+    } \
+  }
+
+SKYPAT_GEN_CMP_HELPER(EQ, ==);
+SKYPAT_GEN_CMP_HELPER(NE, !=);
+SKYPAT_GEN_CMP_HELPER(LE, <=);
+SKYPAT_GEN_CMP_HELPER(LT, < );
+SKYPAT_GEN_CMP_HELPER(GE, >=);
+SKYPAT_GEN_CMP_HELPER(GT, > );
+
+
 //===----------------------------------------------------------------------===//
 // Listener
 //===----------------------------------------------------------------------===//
@@ -765,41 +783,50 @@ public:
   SKYPAT_TEST_BOOLEAN(!(condition), #condition, true, false, \
                       SKYPAT_FATAL_FAILURE)
 
-#define SKYPAT_EXPECT_PRED(condition, actual, expected) \
-  SKYPAT_TEST_PREDICATE(condition, #condition, \
-                     actual, expected, \
-                     SKYPAT_NONFATAL_FAILURE)
+#define SKYPAT_EXPECT_PRED(condition, op, actual, expected) \
+  skypat::testing::CompareHelper##condition(actual, expected, \
+                                            #actual, #expected, \
+                                            "(" #actual " " #op " " #expected ")", \
+                                            skypat::testing::TestPartResult::kNonFatalFailure, \
+                                            __FILE__, __LINE__ \
+  );
 
-#define SKYPAT_ASSERT_PRED(condition, actual, expected) \
-  SKYPAT_TEST_PREDICATE(condition, #condition, \
-                     actual, expected, \
-                     SKYPAT_FATAL_FAILURE)
+#define SKYPAT_ASSERT_PRED(condition, op, actual, expected) \
+  SKYPAT_UNAMBIGUOUS_ELSE_BLOCKER \
+  if (!skypat::testing::CompareHelper##condition(actual, expected, \
+                                                 #actual, #expected, \
+                                                 "(" #actual " " #op " " #expected ")", \
+                                                 skypat::testing::TestPartResult::kFatalFailure, \
+                                                 __FILE__, __LINE__ \
+  )) return;
+
+
 
 #define EXPECT_EQ(actual, expected) \
-  SKYPAT_EXPECT_PRED((actual == expected), actual, expected)
+  SKYPAT_EXPECT_PRED(EQ, ==, actual, expected)
 #define EXPECT_NE(actual, expected) \
-  SKYPAT_EXPECT_PRED((actual != expected), actual, expected)
+  SKYPAT_EXPECT_PRED(NE, !=, actual, expected)
 #define EXPECT_LE(actual, expected) \
-  SKYPAT_EXPECT_PRED((actual <= expected), actual, expected)
+  SKYPAT_EXPECT_PRED(LE, <=, actual, expected)
 #define EXPECT_LT(actual, expected) \
-  SKYPAT_EXPECT_PRED((actual < expected), actual, expected)
+  SKYPAT_EXPECT_PRED(LT, < , actual, expected)
 #define EXPECT_GE(actual, expected) \
-  SKYPAT_EXPECT_PRED((actual >= expected), actual, expected)
+  SKYPAT_EXPECT_PRED(GE, >=, actual, expected)
 #define EXPECT_GT(actual, expected) \
-  SKYPAT_EXPECT_PRED((actual > expected), actual, expected)
+  SKYPAT_EXPECT_PRED(GT, > , actual, expected)
 
 #define ASSERT_EQ(actual, expected) \
-  SKYPAT_ASSERT_PRED((actual == expected), actual, expected)
+  SKYPAT_ASSERT_PRED(EQ, ==, actual, expected)
 #define ASSERT_NE(actual, expected) \
-  SKYPAT_ASSERT_PRED((actual != expected), actual, expected)
+  SKYPAT_ASSERT_PRED(NE, !=, actual, expected)
 #define ASSERT_LE(actual, expected) \
-  SKYPAT_ASSERT_PRED((actual <= expected), actual, expected)
+  SKYPAT_ASSERT_PRED(LE, <=, actual, expected)
 #define ASSERT_LT(actual, expected) \
-  SKYPAT_ASSERT_PRED((actual < expected), actual, expected)
+  SKYPAT_ASSERT_PRED(LT, < , actual, expected)
 #define ASSERT_GE(actual, expected) \
-  SKYPAT_ASSERT_PRED((actual >= expected), actual, expected)
+  SKYPAT_ASSERT_PRED(GE, >=, actual, expected)
 #define ASSERT_GT(actual, expected) \
-  SKYPAT_ASSERT_PRED((actual > expected), actual, expected)
+  SKYPAT_ASSERT_PRED(GT, > , actual, expected)
 
 #define PERFORM(event) \
   for (skypat::testing::PerfIterator __loop(__FILE__, __LINE__, event); \
